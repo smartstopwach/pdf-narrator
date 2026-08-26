@@ -264,12 +264,11 @@ input[type=range]::-webkit-slider-runnable-track {
     background-color: rgba(14, 165, 233, 0.2);
 }
 
-/* Focus Mode Teleprompter */
+/* Focus Mode Teleprompter (Apple Music Lyrics Style) */
 .focus-overlay {
     position: fixed;
     top: 0; left: 0; width: 100vw; height: 100vh;
-    background: rgba(15, 23, 42, 0.98);
-    backdrop-filter: blur(15px);
+    background: radial-gradient(circle at center, #1e293b 0%, #020617 100%);
     z-index: 9999;
     display: flex;
     flex-direction: column;
@@ -288,34 +287,47 @@ input[type=range]::-webkit-slider-runnable-track {
     color: white; 
     padding: 10px 20px; 
     border-radius: 20px;
+    z-index: 10000;
+    transition: all 0.3s;
 }
 
 .close-focus:hover {
     background: rgba(239, 68, 68, 0.8);
     border-color: rgba(239, 68, 68, 1);
+    transform: scale(1.05);
 }
 
 .focus-content {
-    max-width: 900px; 
+    max-width: 1000px; 
     width: 100%;
+    height: 80vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    /* Lyrics fade effect at top and bottom */
+    mask-image: linear-gradient(transparent, black 15%, black 85%, transparent);
+    -webkit-mask-image: linear-gradient(transparent, black 15%, black 85%, transparent);
 }
 
 .focus-dim {
-    font-size: clamp(1.2rem, 3vw, 1.8rem);
-    color: rgba(255,255,255,0.2);
-    margin: 20px 0;
-    transition: all 0.4s ease;
-    filter: blur(2px);
+    font-size: clamp(1.2rem, 3vw, 2rem);
+    color: rgba(255,255,255,0.15);
+    margin: 30px 0;
+    transition: all 0.6s cubic-bezier(0.2, 1, 0.2, 1);
+    filter: blur(4px);
+    transform: scale(0.9);
 }
 
 .focus-active {
-    font-size: clamp(2rem, 5vw, 3.5rem);
+    font-size: clamp(2rem, 5vw, 4.5rem);
     color: #fff;
-    text-shadow: 0 0 30px rgba(79, 70, 229, 0.8);
+    text-shadow: 0 0 50px rgba(79, 70, 229, 0.9), 0 0 10px rgba(255, 255, 255, 0.5);
     margin: 40px 0;
-    line-height: 1.4;
+    line-height: 1.3;
     font-family: 'Poppins', sans-serif;
-    transition: all 0.4s ease;
+    transition: all 0.6s cubic-bezier(0.2, 1, 0.2, 1);
+    transform: scale(1.05);
 }
 #loading {
     margin: 30px 0;

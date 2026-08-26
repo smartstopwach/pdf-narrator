@@ -84,24 +84,58 @@ const visualizer = document.getElementById('voice-visualizer');
 
 const ambienceAudio = new Audio();
 ambienceAudio.loop = true;
+let targetAmbienceVolume = 0.3;
+
 const ambienceSounds = {
     rain: 'https://actions.google.com/sounds/v1/weather/rain_Heavy_loud.ogg',
     fire: 'https://actions.google.com/sounds/v1/ambiences/fire.ogg',
     coffee: 'https://actions.google.com/sounds/v1/ambiences/coffee_shop.ogg'
 };
 
+function playAmbienceWithFade() {
+    if (ambienceSelect.value === 'none') return;
+    ambienceAudio.volume = 0;
+    ambienceAudio.play().catch(() => {});
+    
+    let vol = 0;
+    const fade = setInterval(() => {
+        vol += 0.02;
+        if (vol >= targetAmbienceVolume) {
+            ambienceAudio.volume = targetAmbienceVolume;
+            clearInterval(fade);
+        } else {
+            ambienceAudio.volume = vol;
+        }
+    }, 50);
+}
+
+function pauseAmbienceWithFade() {
+    let vol = ambienceAudio.volume;
+    const fade = setInterval(() => {
+        vol -= 0.02;
+        if (vol <= 0) {
+            ambienceAudio.volume = 0;
+            ambienceAudio.pause();
+            clearInterval(fade);
+        } else {
+            ambienceAudio.volume = vol;
+        }
+    }, 50);
+}
+
 ambienceSelect.addEventListener('change', (e) => {
     if (e.target.value === 'none') {
-        ambienceAudio.pause();
+        pauseAmbienceWithFade();
     } else {
         ambienceAudio.src = ambienceSounds[e.target.value];
         if (synth && synth.speaking && !synth.paused) {
-            ambienceAudio.play();
+            playAmbienceWithFade();
         }
     }
 });
 ambienceVolume.addEventListener('input', (e) => {
-    ambienceAudio.volume = parseFloat(e.target.value);
+    targetAmbienceVolume = parseFloat(e.target.value);
+    ambienceAudio.volume = targetAmbienceVolume;
 });
 
 // Live Voice Visualizer Logic
@@ -600,7 +634,7 @@ function speakText(text, textContainer, onEndCallback) {
             // Multi-Voice (Dialogue) Logic
             if (multiVoiceToggle.checked && primaryVoice) {
                 const currentText = chunks[sIndex];
-                const isDialogue = /["'“‘”’]/.test(currentText) || currentText.includes('कहा');
+                const isDialogue = /["'“‘”’]|कहा|बोला|बोली|पूछा|चिल्लाया|जवाब दिया/i.test(currentText);
                 
                 if (isDialogue) {
                     const langPrefix = primaryVoice.lang.split('-')[0];
@@ -609,9 +643,11 @@ function speakText(text, textContainer, onEndCallback) {
                     if (altVoice) {
                         utterance.voice = altVoice;
                     } else {
-                        // If no alternative voice, dynamically shift the pitch higher for characters
-                        currentPitch = Math.min(currentPitch + 0.5, 2);
+                        // Dynamically shift pitch for distinct character effect
+                        currentPitch = currentPitch > 1 ? 0.8 : 1.4;
                     }
+                    // Slow down slightly for dramatic dialogue
+                    utterance.rate = utterance.rate * 0.95;
                 }
             }
             
