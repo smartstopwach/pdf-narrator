@@ -110,6 +110,20 @@ input[type="file"] {
     font-size: 16px;
 }
 
+#resume-section {
+    background-color: #e8f8f5;
+    padding: 20px;
+    border-radius: 8px;
+    margin: 20px 0;
+    text-align: center;
+    border: 1px solid #1abc9c;
+}
+
+#resume-section h3 {
+    color: #16a085;
+    margin-top: 0;
+}
+
 #controls {
     background-color: #f9f9f9;
     padding: 20px;

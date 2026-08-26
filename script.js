@@ -1,6 +1,7 @@
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
 const uploadInput = document.getElementById('pdf-upload');
+const uploadSection = document.querySelector('.upload-section');
 const loadingDiv = document.getElementById('loading');
 const loadingText = document.getElementById('loading-text');
 const setupSection = document.getElementById('setup-section');
@@ -13,6 +14,11 @@ const voiceSelect = document.getElementById('voice-select');
 const generateBtn = document.getElementById('generate-btn');
 const partsInput = document.getElementById('parts-input');
 
+const resumeSection = document.getElementById('resume-section');
+const resumeBtn = document.getElementById('resume-btn');
+const clearBtn = document.getElementById('clear-btn');
+const savedFileName = document.getElementById('saved-file-name');
+
 let fullExtractedText = '';
 let storyParts = [];
 let currentPartIndex = 0;
@@ -20,15 +26,48 @@ let synth = window.speechSynthesis;
 let voices = [];
 let recommendedPartsCount = 10;
 
-// Load available voices for Text-to-Speech
+// Page Load: Check if we have saved data
+window.addEventListener('DOMContentLoaded', () => {
+    if (localStorage.getItem('pdf_parts')) {
+        uploadSection.classList.add('hidden');
+        resumeSection.classList.remove('hidden');
+        savedFileName.textContent = localStorage.getItem('pdf_name') || 'Pichli PDF';
+    }
+});
+
+// Resume Previous PDF
+resumeBtn.addEventListener('click', () => {
+    storyParts = JSON.parse(localStorage.getItem('pdf_parts') || '[]');
+    currentPartIndex = parseInt(localStorage.getItem('pdf_current_index') || '0');
+    
+    resumeSection.classList.add('hidden');
+    controlsDiv.classList.remove('hidden');
+    renderParts();
+    
+    // Highlight the part user was on
+    setTimeout(() => {
+        const currentCard = document.getElementById(`part-${currentPartIndex}`);
+        if (currentCard) {
+            currentCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            currentCard.classList.add('active');
+        }
+    }, 100);
+});
+
+// Clear Storage to start fresh
+clearBtn.addEventListener('click', () => {
+    localStorage.clear();
+    resumeSection.classList.add('hidden');
+    uploadSection.classList.remove('hidden');
+});
+
+// Load Voices
 function populateVoiceList() {
     voices = synth.getVoices();
     voiceSelect.innerHTML = '';
     
-    // Filter out everything except Hindi and English voices
     let filteredVoices = voices.filter(voice => voice.lang.startsWith('hi') || voice.lang.startsWith('en'));
 
-    // Sort voices to show Premium/Natural first, then Hindi, then English
     let sortedVoices = filteredVoices.sort((a, b) => {
         const aPremium = a.name.includes('Natural') || a.name.includes('Online') || a.name.includes('Google');
         const bPremium = b.name.includes('Natural') || b.name.includes('Online') || b.name.includes('Google');
@@ -53,11 +92,11 @@ if (speechSynthesis.onvoiceschanged !== undefined) {
     speechSynthesis.onvoiceschanged = populateVoiceList;
 }
 
+// Read New PDF
 uploadInput.addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    // Reset UI
     loadingDiv.classList.remove('hidden');
     setupSection.classList.add('hidden');
     controlsDiv.classList.add('hidden');
@@ -76,19 +115,15 @@ uploadInput.addEventListener('change', async (e) => {
         
         let textArray = [];
 
-        // Extract text page by page (without freezing browser for 500 pages)
         for (let i = 1; i <= numPages; i++) {
             const page = await pdf.getPage(i);
             const textContent = await page.getTextContent();
             
-            // Better Text extraction logic (adding spaces between items appropriately)
             const pageText = textContent.items.map(item => item.str).join(' ');
             textArray.push(pageText);
 
-            // Update UI progress every 5 pages or at the end
             if (i % 5 === 0 || i === numPages) {
                 loadingText.innerText = `PDF padhi ja rahi hai... Page ${i} / ${numPages} mukammal.`;
-                // Small delay to let browser render the UI
                 await new Promise(resolve => setTimeout(resolve, 5));
             }
         }
@@ -96,20 +131,17 @@ uploadInput.addEventListener('change', async (e) => {
         fullExtractedText = textArray.join('\n\n').replace(/\s+/g, ' ').trim();
         
         if (fullExtractedText.length < numPages * 10) {
-            alert("Warning: Is PDF mein text bohot kam hai. Ho sakta hai ye 'Scanned Images' ki PDF ho. Images padhne ke liye mehengi OCR technology chahiye hoti hai.");
+            alert("Warning: Is PDF mein text bohot kam hai.");
         }
-
         if (fullExtractedText.length === 0) {
             alert("Is PDF mein koi text nahi mila!");
             loadingDiv.classList.add('hidden');
             return;
         }
 
-        // Calculate Words and Recommended Parts
         const words = fullExtractedText.split(' ').filter(w => w.length > 0);
         const totalWords = words.length;
         
-        // Assume 800-1000 words take about 5-7 minutes to read.
         recommendedPartsCount = Math.max(1, Math.ceil(totalWords / 900));
         
         document.getElementById('word-count').innerText = totalWords.toLocaleString();
@@ -127,6 +159,7 @@ uploadInput.addEventListener('change', async (e) => {
     }
 });
 
+// Generate Parts
 generateBtn.addEventListener('click', () => {
     let userParts = parseInt(partsInput.value);
     if (!userParts || userParts < 1) {
@@ -144,8 +177,18 @@ generateBtn.addEventListener('click', () => {
         }
     }
 
+    // Save Data to Local Storage (so it doesn't get lost on refresh)
+    try {
+        localStorage.setItem('pdf_parts', JSON.stringify(storyParts));
+        localStorage.setItem('pdf_name', uploadInput.files[0] ? uploadInput.files[0].name : 'PDF File');
+        localStorage.setItem('pdf_current_index', '0');
+    } catch (err) {
+        console.warn("Storage full", err);
+    }
+
     renderParts();
     setupSection.classList.add('hidden');
+    uploadSection.classList.add('hidden');
     controlsDiv.classList.remove('hidden');
 });
 
@@ -182,16 +225,22 @@ function playPart(index) {
     synth.cancel(); 
     currentPartIndex = index;
     
+    // Save current part progress
+    localStorage.setItem('pdf_current_index', index.toString());
+    
     document.querySelectorAll('.part-card').forEach(card => {
         card.classList.remove('active', 'playing');
     });
     const currentCard = document.getElementById(`part-${index}`);
-    currentCard.classList.add('active', 'playing');
-    
-    currentCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (currentCard) {
+        currentCard.classList.add('active', 'playing');
+        currentCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
     
     speakText(storyParts[index], () => {
-        document.getElementById(`part-${index}`).classList.remove('playing');
+        if (document.getElementById(`part-${index}`)) {
+            document.getElementById(`part-${index}`).classList.remove('playing');
+        }
         playPart(index + 1); 
     });
 }
