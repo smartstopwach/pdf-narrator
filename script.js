@@ -124,42 +124,53 @@ uploadInput.addEventListener('change', async (e) => {
             const page = await pdf.getPage(i);
             const textContent = await page.getTextContent();
             
-            // Advanced Text Extraction: Positional Heuristic to fix Hindi split characters
+            // Advanced Text Extraction with dynamic spacing and Hindi Grammar Fixer
             let pageText = "";
             let lastItem = null;
 
+            // Optional: Sorting items by Y, then X could help, but usually items are in order.
             for (const item of textContent.items) {
+                if (!item.str || item.str.trim() === '') continue;
+
                 if (lastItem) {
                     const yDiff = Math.abs(item.transform[5] - lastItem.transform[5]);
+                    
                     if (yDiff > 5) {
                         pageText += '\n';
                     } else {
                         const expectedNextX = lastItem.transform[4] + lastItem.width;
-                        const gap = item.transform[4] - expectedNextX;
+                        const actualX = item.transform[4];
+                        const gap = actualX - expectedNextX;
                         
-                        // If gap is larger than 3 units, or the text itself is a space, treat it as a word break.
-                        if (gap > 3 || item.str === ' ') {
-                            if (!pageText.endsWith(' ') && !pageText.endsWith('\n')) {
-                                pageText += ' ';
-                            }
+                        // Calculate dynamic space threshold based on font size
+                        const fontSize = Math.abs(lastItem.transform[0]) || 12;
+                        const spaceThreshold = fontSize * 0.20; // 20% of font size
+
+                        if (gap > spaceThreshold) {
+                            pageText += ' ';
                         }
                     }
                 }
                 
-                if (item.str.trim() !== '') {
-                    pageText += item.str;
-                } else if (item.str === ' ' && !pageText.endsWith(' ') && !pageText.endsWith('\n')) {
-                    pageText += ' ';
-                }
-                
-                // Keep track of the last non-empty item for positional reference, 
-                // but if it's just a space, don't update lastItem so we don't mess up gap calculations.
-                if (item.str.trim() !== '' || !lastItem) {
-                    lastItem = item;
-                }
+                pageText += item.str;
+                lastItem = item;
             }
             
-            textArray.push(pageText.trim());
+            // --- HINDI GRAMMAR & MATRA FIXER ---
+            // 1. Remove spaces before all matras and halants
+            pageText = pageText.replace(/ ([ािीुूृेैोौंःँॅ्])/g, '$1');
+            
+            // 2. Remove spaces after halant so half-letters join properly (e.g. क् + य)
+            pageText = pageText.replace(/् /g, '्');
+            
+            // 3. Fix Chhoti 'i' (ि) appearing before the consonant (common PDF glitch)
+            // It swaps "ि" + "क" to "कि"
+            pageText = pageText.replace(/(ि)([क-ह])/g, '$2$1');
+            
+            // 4. Clean up any accidental double spaces created
+            pageText = pageText.replace(/  +/g, ' ').trim();
+
+            textArray.push(pageText);
 
             if (i % 5 === 0 || i === numPages) {
                 loadingText.innerText = `PDF padhi ja rahi hai... Page ${i} / ${numPages} mukammal.`;
