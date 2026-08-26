@@ -19,8 +19,11 @@ function populateVoiceList() {
     voices = synth.getVoices();
     voiceSelect.innerHTML = '';
     
-    // Sort voices to show Hindi/English first, and prioritize 'Natural' or 'Google' premium voices
-    let sortedVoices = [...voices].sort((a, b) => {
+    // Filter out everything except Hindi and English voices
+    let filteredVoices = voices.filter(voice => voice.lang.startsWith('hi') || voice.lang.startsWith('en'));
+
+    // Sort voices to show Premium/Natural first, then Hindi, then English
+    let sortedVoices = filteredVoices.sort((a, b) => {
         // Prioritize natural/premium voices
         const aPremium = a.name.includes('Natural') || a.name.includes('Online') || a.name.includes('Google');
         const bPremium = b.name.includes('Natural') || b.name.includes('Online') || b.name.includes('Google');
@@ -28,9 +31,9 @@ function populateVoiceList() {
         if (aPremium && !bPremium) return -1;
         if (!aPremium && bPremium) return 1;
 
-        // Then prioritize Hindi
-        if (a.lang.includes('hi') && !b.lang.includes('hi')) return -1;
-        if (!a.lang.includes('hi') && b.lang.includes('hi')) return 1;
+        // Then prioritize Hindi over English
+        if (a.lang.startsWith('hi') && !b.lang.startsWith('hi')) return -1;
+        if (!a.lang.startsWith('hi') && b.lang.startsWith('hi')) return 1;
         
         return 0;
     });
