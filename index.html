@@ -19,7 +19,26 @@
     <!-- Tesseract.js for High Accuracy OCR -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 </head>
-<body>
+<body class="theme-dark">
+    <!-- Top Bar for Themes -->
+    <div class="top-bar">
+        <select id="theme-select" class="theme-dropdown">
+            <option value="theme-light">☀️ Light Mode</option>
+            <option value="theme-dark" selected>🌙 Dark Mode</option>
+            <option value="theme-sepia">📜 Book (Sepia)</option>
+        </select>
+    </div>
+
+    <!-- Dictionary Pop-up Modal -->
+    <div id="dict-modal" class="hidden glass-panel dict-modal">
+        <h3>📖 Shabd Kosh (Dictionary)</h3>
+        <p>Aapne chuna: <strong id="selected-word"></strong></p>
+        <div style="margin: 20px 0;">
+            <a id="search-meaning-btn" href="#" target="_blank" class="btn-primary" style="text-decoration:none;">Google Par Arth Dekhein 🔍</a>
+        </div>
+        <button id="close-dict-btn" class="btn-play">▶ Resume Kahani</button>
+    </div>
+
     <!-- Dynamic 3D Background Elements -->
     <div class="bg-orb orb-1"></div>
     <div class="bg-orb orb-2"></div>
@@ -74,6 +93,18 @@
                 <label for="voice-select">Awaaz (Voice) chunein:</label>
                 <select id="voice-select"></select>
             </div>
+            
+            <div class="sliders-container">
+                <div class="slider-group">
+                    <label>Speed: <span id="speed-label">1.0</span>x</label>
+                    <input type="range" id="speed-slider" min="0.5" max="2" step="0.1" value="1">
+                </div>
+                <div class="slider-group">
+                    <label>Pitch: <span id="pitch-label">1.0</span></label>
+                    <input type="range" id="pitch-slider" min="0" max="2" step="0.1" value="1">
+                </div>
+            </div>
+
             <div class="buttons">
                 <button id="play-btn" class="btn-play">▶ Play / Resume</button>
                 <button id="pause-btn" class="btn-pause">⏸ Pause</button>

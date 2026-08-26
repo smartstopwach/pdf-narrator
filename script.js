@@ -21,12 +21,42 @@ const resumeBtn = document.getElementById('resume-btn');
 const clearBtn = document.getElementById('clear-btn');
 const savedFileName = document.getElementById('saved-file-name');
 
+const themeSelect = document.getElementById('theme-select');
+const speedSlider = document.getElementById('speed-slider');
+const pitchSlider = document.getElementById('pitch-slider');
+const speedLabel = document.getElementById('speed-label');
+const pitchLabel = document.getElementById('pitch-label');
+const dictModal = document.getElementById('dict-modal');
+const selectedWordEl = document.getElementById('selected-word');
+const searchMeaningBtn = document.getElementById('search-meaning-btn');
+const closeDictBtn = document.getElementById('close-dict-btn');
+
 let storyParts = [];
 let currentPartIndex = 0;
 let synth = window.speechSynthesis;
 let voices = [];
 let isProcessingPDF = false;
 let waitingForNextPartIndex = -1;
+
+// Theme Logic
+const savedTheme = localStorage.getItem('pdf_theme') || 'theme-dark';
+document.body.className = savedTheme;
+themeSelect.value = savedTheme;
+
+themeSelect.addEventListener('change', (e) => {
+    document.body.className = e.target.value;
+    localStorage.setItem('pdf_theme', e.target.value);
+});
+
+// Slider Logic
+speedSlider.addEventListener('input', (e) => speedLabel.innerText = e.target.value);
+pitchSlider.addEventListener('input', (e) => pitchLabel.innerText = e.target.value);
+
+// Dictionary Logic
+closeDictBtn.addEventListener('click', () => {
+    dictModal.classList.add('hidden');
+    synth.resume(); // Resume story where it left off
+});
 
 function preprocessCanvasForHindi(canvas) {
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -340,6 +370,8 @@ function playPart(index) {
     currentPartIndex = index;
     
     localStorage.setItem('pdf_current_index', index.toString());
+    // Also reset sentence index on new part play
+    localStorage.removeItem('pdf_sentence_index');
     
     document.querySelectorAll('.part-card').forEach(card => {
         card.classList.remove('active', 'playing');
@@ -383,17 +415,40 @@ function speakText(text, textContainer, onEndCallback) {
     }
     if (currentChunk) chunks.push(currentChunk.trim());
     
-    // UI: Wrap chunks in spans for highlighting
+    // UI: Wrap chunks in spans for highlighting and dictionary tap
     if (textContainer) {
         textContainer.innerHTML = '';
         chunks.forEach((chunk) => {
             const span = document.createElement('span');
             span.textContent = chunk + ' ';
+            
+            // Add click listener for Dictionary feature
+            span.addEventListener('click', (e) => {
+                e.stopPropagation(); // Prevent triggering full part play
+                synth.pause();
+                
+                const cleanWord = chunk.replace(/[\|।,!?'"()]/g, '').trim();
+                selectedWordEl.innerText = cleanWord;
+                
+                // Open Google Search / Translate for exact meaning
+                searchMeaningBtn.href = `https://www.google.com/search?q=${encodeURIComponent(cleanWord + ' meaning in hindi')}`;
+                
+                dictModal.classList.remove('hidden');
+            });
+            
             textContainer.appendChild(span);
         });
     }
     
+    // Check if we have a saved exact sentence to resume from
     let sIndex = 0;
+    const savedSentence = localStorage.getItem('pdf_sentence_index');
+    if (savedSentence !== null) {
+        sIndex = parseInt(savedSentence);
+        // Clear it so if we play normally next time, it starts from 0
+        localStorage.removeItem('pdf_sentence_index');
+    }
+
     let isCancelled = false;
     
     window.currentSpeakCancel = () => { 
@@ -407,12 +462,12 @@ function speakText(text, textContainer, onEndCallback) {
         
         if (sIndex < chunks.length) {
             
+            // Save exact location for bookmarking
+            localStorage.setItem('pdf_sentence_index', sIndex.toString());
+            
             // Smart Red Pen Highlight & Auto-Scroll
             if (textContainer) {
-                // Clear previous highlights completely
                 document.querySelectorAll('.highlight-text').forEach(el => el.classList.remove('highlight-text'));
-                
-                // Directly target the exact span inside THIS specific part card
                 const currentSpan = textContainer.children[sIndex];
                 if (currentSpan) {
                     currentSpan.classList.add('highlight-text');
@@ -421,6 +476,10 @@ function speakText(text, textContainer, onEndCallback) {
             }
 
             const utterance = new SpeechSynthesisUtterance(chunks[sIndex]);
+            
+            // Apply Sliders
+            utterance.rate = parseFloat(speedSlider.value) || 1;
+            utterance.pitch = parseFloat(pitchSlider.value) || 1;
             
             const selectedVoice = voiceSelect.options[voiceSelect.selectedIndex];
             if (selectedVoice) {
