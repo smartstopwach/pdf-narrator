@@ -157,24 +157,6 @@ function appendPartToUI(partText, index) {
     div.appendChild(title);
     div.appendChild(textPreview);
     
-    // Dynamic 3D mouse move effect
-    div.addEventListener('mousemove', (e) => {
-        const rect = div.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        const centerX = rect.width / 2;
-        const centerY = rect.height / 2;
-        
-        const rotateX = ((y - centerY) / centerY) * -10; // Max rotation 10deg
-        const rotateY = ((x - centerX) / centerX) * 10;
-        
-        div.style.transform = `perspective(1000px) scale(1.02) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
-    });
-
-    div.addEventListener('mouseleave', () => {
-        div.style.transform = `perspective(1000px) scale(1) rotateX(0) rotateY(0)`;
-    });
-    
     div.addEventListener('click', () => {
         playPart(index);
     });
@@ -404,9 +386,8 @@ function speakText(text, textContainer, onEndCallback) {
     // UI: Wrap chunks in spans for highlighting
     if (textContainer) {
         textContainer.innerHTML = '';
-        chunks.forEach((chunk, i) => {
+        chunks.forEach((chunk) => {
             const span = document.createElement('span');
-            span.id = `chunk-span-${i}`;
             span.textContent = chunk + ' ';
             textContainer.appendChild(span);
         });
@@ -418,9 +399,7 @@ function speakText(text, textContainer, onEndCallback) {
     window.currentSpeakCancel = () => { 
         isCancelled = true; 
         synth.cancel(); 
-        if (document.getElementById(`chunk-span-${sIndex}`)) {
-            document.getElementById(`chunk-span-${sIndex}`).classList.remove('highlight-text');
-        }
+        document.querySelectorAll('.highlight-text').forEach(el => el.classList.remove('highlight-text'));
     };
 
     function speakNextSentence() {
@@ -428,10 +407,13 @@ function speakText(text, textContainer, onEndCallback) {
         
         if (sIndex < chunks.length) {
             
-            // Apply Red Pen Highlight & Auto-Scroll
+            // Smart Red Pen Highlight & Auto-Scroll
             if (textContainer) {
+                // Clear previous highlights completely
                 document.querySelectorAll('.highlight-text').forEach(el => el.classList.remove('highlight-text'));
-                const currentSpan = document.getElementById(`chunk-span-${sIndex}`);
+                
+                // Directly target the exact span inside THIS specific part card
+                const currentSpan = textContainer.children[sIndex];
                 if (currentSpan) {
                     currentSpan.classList.add('highlight-text');
                     currentSpan.scrollIntoView({ behavior: 'smooth', block: 'center' });
