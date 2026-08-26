@@ -1,0 +1,16 @@
+{
+  "name": "PDF Story Narrator",
+  "short_name": "PDF Narrator",
+  "description": "Free PDF Story Narrator with AI OCR and Voice",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#4f46e5",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}

@@ -513,4 +513,4 @@ select:focus, input[type="number"]:focus {
     box-shadow: 0 0 15px rgba(79, 70, 229, 0.2);
 }
 
-@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }/* Live Voice Visualizer */\n.visualizer { display: flex; gap: 6px; height: 40px; align-items: flex-end; justify-content: center; margin: 20px 0; }\n.visualizer .bar { width: 8px; background: linear-gradient(0deg, var(--primary), var(--accent)); border-radius: 4px; height: 10%; transition: height 0.1s ease; box-shadow: 0 0 10px rgba(236, 72, 153, 0.4); }

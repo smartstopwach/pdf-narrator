@@ -1,3 +1,31 @@
+// PWA / Service Worker Registration
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').then(() => {
+            console.log("Service Worker Registered for Offline PWA");
+        });
+    });
+}
+
+// PWA Install Prompt
+let deferredPrompt;
+const installAppBtn = document.getElementById('install-app-btn');
+window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    installAppBtn.classList.remove('hidden');
+});
+installAppBtn.addEventListener('click', async () => {
+    if (deferredPrompt) {
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') {
+            installAppBtn.classList.add('hidden');
+        }
+        deferredPrompt = null;
+    }
+});
+
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
 const uploadInput = document.getElementById('pdf-upload');
@@ -39,6 +67,48 @@ const focusPrevText = document.getElementById('focus-prev-text');
 const focusMainText = document.getElementById('focus-main-text');
 const focusNextText = document.getElementById('focus-next-text');
 const multiVoiceToggle = document.getElementById('multi-voice-toggle');
+
+// Cinematic Ambience Elements
+const ambienceSelect = document.getElementById('ambience-select');
+const ambienceVolume = document.getElementById('ambience-volume');
+const visualizer = document.getElementById('voice-visualizer');
+
+const ambienceAudio = new Audio();
+ambienceAudio.loop = true;
+const ambienceSounds = {
+    rain: 'https://actions.google.com/sounds/v1/weather/rain_Heavy_loud.ogg',
+    fire: 'https://actions.google.com/sounds/v1/ambiences/fire.ogg',
+    coffee: 'https://actions.google.com/sounds/v1/ambiences/coffee_shop.ogg'
+};
+
+ambienceSelect.addEventListener('change', (e) => {
+    if (e.target.value === 'none') {
+        ambienceAudio.pause();
+    } else {
+        ambienceAudio.src = ambienceSounds[e.target.value];
+        if (synth.speaking && !synth.paused) {
+            ambienceAudio.play();
+        }
+    }
+});
+ambienceVolume.addEventListener('input', (e) => {
+    ambienceAudio.volume = parseFloat(e.target.value);
+});
+
+// Live Voice Visualizer Logic
+function updateVisualizer() {
+    const bars = document.querySelectorAll('.visualizer .bar');
+    if (synth.speaking && !synth.paused) {
+        bars.forEach(bar => {
+            const height = Math.floor(Math.random() * 80) + 20; // Random height between 20% and 100%
+            bar.style.height = `${height}%`;
+        });
+    } else {
+        bars.forEach(bar => bar.style.height = '10%');
+    }
+    setTimeout(() => requestAnimationFrame(updateVisualizer), 120); // Update every 120ms for smooth beat effect
+}
+updateVisualizer();
 
 let storyParts = [];
 let currentPartIndex = 0;
@@ -552,9 +622,19 @@ function speakText(text, textContainer, onEndCallback) {
                 document.querySelectorAll('.highlight-text').forEach(el => el.classList.remove('highlight-text'));
             }
             if (onEndCallback && !isCancelled) onEndCallback();
+            if (ambienceSelect.value !== 'none' && sIndex >= chunks.length) {
+                 // Don't completely kill ambience yet if transitioning to next part smoothly, 
+                 // but handled by playBtn
+            }
         }
     }
     
+    // Auto-start Ambience if selected
+    if (ambienceSelect.value !== 'none' && !isCancelled) {
+        ambienceAudio.play().catch(e => console.log("Audio play blocked by browser", e));
+    }
+    
+    visualizer.classList.remove('hidden');
     speakNextSentence();
 }
 
@@ -562,6 +642,7 @@ playBtn.addEventListener('click', () => {
     if (synth.paused) {
         synth.resume();
         document.getElementById(`part-${currentPartIndex}`)?.classList.add('playing');
+        if (ambienceSelect.value !== 'none') ambienceAudio.play();
     } else if (!synth.speaking) {
         playPart(currentPartIndex);
     }
@@ -571,6 +652,7 @@ pauseBtn.addEventListener('click', () => {
     if (synth.speaking && !synth.paused) {
         synth.pause();
         document.getElementById(`part-${currentPartIndex}`)?.classList.remove('playing');
+        ambienceAudio.pause();
     }
 });
 
@@ -578,4 +660,6 @@ stopBtn.addEventListener('click', () => {
     if (window.currentSpeakCancel) window.currentSpeakCancel();
     synth.cancel();
     document.querySelectorAll('.part-card').forEach(card => card.classList.remove('active', 'playing'));
+    visualizer.classList.add('hidden');
+    ambienceAudio.pause();
 });
