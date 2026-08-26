@@ -39,6 +39,16 @@
         <button id="close-dict-btn" class="btn-play">▶ Resume Kahani</button>
     </div>
 
+    <!-- Focus Mode (Teleprompter) Overlay -->
+    <div id="focus-overlay" class="hidden focus-overlay">
+        <button id="close-focus-btn" class="close-focus">✖ Close Focus Mode</button>
+        <div class="focus-content">
+            <p id="focus-prev-text" class="focus-dim"></p>
+            <h2 id="focus-main-text" class="focus-active">Aapki kahani yahan dikhegi...</h2>
+            <p id="focus-next-text" class="focus-dim"></p>
+        </div>
+    </div>
+
     <!-- Dynamic 3D Background Elements -->
     <div class="bg-orb orb-1"></div>
     <div class="bg-orb orb-2"></div>
@@ -105,10 +115,21 @@
                 </div>
             </div>
 
+            <div class="options-container" style="text-align: center; margin: 15px 0;">
+                <label style="cursor: pointer; font-weight: 600; color: var(--text-main); display: inline-flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" id="multi-voice-toggle" style="width: 20px; height: 20px;"> 
+                    🗣️ Multi-Voice Dialogues (Experimental)
+                </label>
+            </div>
+
             <div class="buttons">
                 <button id="play-btn" class="btn-play">▶ Play / Resume</button>
                 <button id="pause-btn" class="btn-pause">⏸ Pause</button>
                 <button id="stop-btn" class="btn-stop">⏹ Stop</button>
+            </div>
+            
+            <div style="text-align: center; margin-top: 20px;">
+                <button id="focus-mode-btn" class="btn-primary" style="padding: 10px 20px; font-size: 1rem;">🔍 Focus Mode (Teleprompter)</button>
             </div>
         </div>
 

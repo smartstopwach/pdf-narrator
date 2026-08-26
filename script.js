@@ -31,12 +31,22 @@ const selectedWordEl = document.getElementById('selected-word');
 const searchMeaningBtn = document.getElementById('search-meaning-btn');
 const closeDictBtn = document.getElementById('close-dict-btn');
 
+// Focus Mode & Multi-Voice elements
+const focusModeBtn = document.getElementById('focus-mode-btn');
+const focusOverlay = document.getElementById('focus-overlay');
+const closeFocusBtn = document.getElementById('close-focus-btn');
+const focusPrevText = document.getElementById('focus-prev-text');
+const focusMainText = document.getElementById('focus-main-text');
+const focusNextText = document.getElementById('focus-next-text');
+const multiVoiceToggle = document.getElementById('multi-voice-toggle');
+
 let storyParts = [];
 let currentPartIndex = 0;
 let synth = window.speechSynthesis;
 let voices = [];
 let isProcessingPDF = false;
 let waitingForNextPartIndex = -1;
+let isFocusMode = false;
 
 // Theme Logic
 const savedTheme = localStorage.getItem('pdf_theme') || 'theme-dark';
@@ -46,6 +56,17 @@ themeSelect.value = savedTheme;
 themeSelect.addEventListener('change', (e) => {
     document.body.className = e.target.value;
     localStorage.setItem('pdf_theme', e.target.value);
+});
+
+// Focus Mode Logic
+focusModeBtn.addEventListener('click', () => {
+    focusOverlay.classList.remove('hidden');
+    isFocusMode = true;
+});
+
+closeFocusBtn.addEventListener('click', () => {
+    focusOverlay.classList.add('hidden');
+    isFocusMode = false;
 });
 
 // Slider Logic
@@ -474,18 +495,46 @@ function speakText(text, textContainer, onEndCallback) {
                     currentSpan.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 }
             }
+            
+            // Focus Mode Teleprompter Updates
+            if (isFocusMode) {
+                focusPrevText.innerText = sIndex > 0 ? chunks[sIndex - 1] : '';
+                focusMainText.innerText = chunks[sIndex];
+                focusNextText.innerText = sIndex < chunks.length - 1 ? chunks[sIndex + 1] : '';
+            }
 
             const utterance = new SpeechSynthesisUtterance(chunks[sIndex]);
             
-            // Apply Sliders
+            // Base Sliders
+            let currentPitch = parseFloat(pitchSlider.value) || 1;
             utterance.rate = parseFloat(speedSlider.value) || 1;
-            utterance.pitch = parseFloat(pitchSlider.value) || 1;
             
             const selectedVoice = voiceSelect.options[voiceSelect.selectedIndex];
+            let primaryVoice = null;
             if (selectedVoice) {
-                const voice = voices.find(v => v.name === selectedVoice.getAttribute('data-name'));
-                if (voice) utterance.voice = voice;
+                primaryVoice = voices.find(v => v.name === selectedVoice.getAttribute('data-name'));
+                utterance.voice = primaryVoice;
             }
+            
+            // Multi-Voice (Dialogue) Logic
+            if (multiVoiceToggle.checked && primaryVoice) {
+                const currentText = chunks[sIndex];
+                const isDialogue = /["'“‘”’]/.test(currentText) || currentText.includes('कहा');
+                
+                if (isDialogue) {
+                    const langPrefix = primaryVoice.lang.split('-')[0];
+                    const altVoice = voices.find(v => v.lang.startsWith(langPrefix) && v.name !== primaryVoice.name);
+                    
+                    if (altVoice) {
+                        utterance.voice = altVoice;
+                    } else {
+                        // If no alternative voice, dynamically shift the pitch higher for characters
+                        currentPitch = Math.min(currentPitch + 0.5, 2);
+                    }
+                }
+            }
+            
+            utterance.pitch = currentPitch;
             
             utterance.onend = () => {
                 sIndex++;
