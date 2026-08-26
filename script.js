@@ -8,15 +8,12 @@ const loadingText = document.getElementById('loading-text');
 const progressTrack = document.getElementById('progress-track');
 const progressFill = document.getElementById('progress-fill');
 const progressPercentage = document.getElementById('progress-percentage');
-const setupSection = document.getElementById('setup-section');
 const controlsDiv = document.getElementById('controls');
 const partsContainer = document.getElementById('parts-container');
 const playBtn = document.getElementById('play-btn');
 const pauseBtn = document.getElementById('pause-btn');
 const stopBtn = document.getElementById('stop-btn');
 const voiceSelect = document.getElementById('voice-select');
-const generateBtn = document.getElementById('generate-btn');
-const partsInput = document.getElementById('parts-input');
 const ocrModeSelect = document.getElementById('ocr-mode');
 
 const resumeSection = document.getElementById('resume-section');
@@ -24,56 +21,34 @@ const resumeBtn = document.getElementById('resume-btn');
 const clearBtn = document.getElementById('clear-btn');
 const savedFileName = document.getElementById('saved-file-name');
 
-let fullExtractedText = '';
 let storyParts = [];
 let currentPartIndex = 0;
 let synth = window.speechSynthesis;
 let voices = [];
-let recommendedPartsCount = 10;
+let isProcessingPDF = false;
+let waitingForNextPartIndex = -1;
 
-// Helper: Apply Devanagari specific Pre-processing on Canvas
 function preprocessCanvasForHindi(canvas) {
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = imageData.data;
-    
-    // Grayscale + High Contrast/Thresholding (Binarization)
     for (let i = 0; i < data.length; i += 4) {
-        const r = data[i];
-        const g = data[i + 1];
-        const b = data[i + 2];
-        
-        // Luminance
-        const v = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-        // Optimal Threshold to preserve Shirorekha (Top line of Hindi) and Matras
-        const threshold = 170; 
-        const val = v > threshold ? 255 : 0;
-        
+        const v = 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
+        const val = v > 170 ? 255 : 0;
         data[i] = data[i+1] = data[i+2] = val;
     }
-    
     ctx.putImageData(imageData, 0, 0);
     return canvas;
 }
 
-// Helper: Advanced UTF-8 Cleanup & Devanagari Normalization
 function cleanupOCRText(text) {
-    // 1. Unicode Normalization
     let cleaned = text.normalize('NFC');
-    
-    // 2. Remove Corrupted/Unrecognized artifact spaces around matras
     cleaned = cleaned.replace(/ ([ािीुूृेैोौंःँॅ्])/g, '$1');
-    
-    // 3. Fix halant spacing (e.g. क् + य)
     cleaned = cleaned.replace(/् /g, '्');
-    
-    // 4. Common Tesseract glitches cleanup
-    cleaned = cleaned.replace(/\|/g, '।'); // Often mistakes Poorna Viram for pipe
-    
-    // 5. Remove multiple spaces and weird linebreaks
+    cleaned = cleaned.replace(/(ि)([क-ह])/g, '$2$1');
+    cleaned = cleaned.replace(/\|/g, '।'); 
     cleaned = cleaned.replace(/  +/g, ' ');
-    cleaned = cleaned.replace(/-\n/g, ''); // Join hyphenated breaks
-    
+    cleaned = cleaned.replace(/-\n/g, ''); 
     return cleaned.trim();
 }
 
@@ -91,7 +66,8 @@ resumeBtn.addEventListener('click', () => {
     
     resumeSection.classList.add('hidden');
     controlsDiv.classList.remove('hidden');
-    renderParts();
+    partsContainer.innerHTML = '';
+    storyParts.forEach((part, index) => appendPartToUI(part, index));
     
     setTimeout(() => {
         const currentCard = document.getElementById(`part-${currentPartIndex}`);
@@ -137,7 +113,6 @@ if (speechSynthesis.onvoiceschanged !== undefined) {
     speechSynthesis.onvoiceschanged = populateVoiceList;
 }
 
-// Helper: Update UI Progress Bar
 function updateProgress(title, desc, percent = null) {
     loadingTitle.innerText = title;
     loadingText.innerText = desc;
@@ -153,17 +128,50 @@ function updateProgress(title, desc, percent = null) {
     }
 }
 
+function appendPartToUI(partText, index) {
+    const div = document.createElement('div');
+    div.className = 'part-card';
+    div.id = `part-${index}`;
+    
+    const title = document.createElement('div');
+    title.className = 'part-title';
+    title.textContent = `Part ${index + 1}`;
+    
+    const textPreview = document.createElement('div');
+    textPreview.className = 'part-text';
+    textPreview.textContent = partText;
+    
+    div.appendChild(title);
+    div.appendChild(textPreview);
+    
+    div.addEventListener('click', () => {
+        playPart(index);
+    });
+    
+    partsContainer.appendChild(div);
+
+    if (index === 0) {
+        controlsDiv.classList.remove('hidden');
+    }
+
+    if (waitingForNextPartIndex === index) {
+        waitingForNextPartIndex = -1;
+        playPart(index);
+    }
+}
+
 uploadInput.addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
     loadingDiv.classList.remove('hidden');
-    setupSection.classList.add('hidden');
     controlsDiv.classList.add('hidden');
     partsContainer.innerHTML = '';
     storyParts = [];
     currentPartIndex = 0;
-    fullExtractedText = '';
+    isProcessingPDF = true;
+    waitingForNextPartIndex = -1;
+    let wordBuffer = [];
     
     updateProgress("Processing PDF...", "Initializing...", 0);
     
@@ -171,6 +179,7 @@ uploadInput.addEventListener('change', async (e) => {
     synth.cancel();
 
     const mode = ocrModeSelect.value;
+    localStorage.setItem('pdf_name', file.name);
     
     try {
         const arrayBuffer = await file.arrayBuffer();
@@ -181,28 +190,32 @@ uploadInput.addEventListener('change', async (e) => {
             standardFontDataUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/standard_fonts/'
         }).promise;
         const numPages = pdf.numPages;
-        
-        let textArray = [];
 
-        if (mode === 'high-acc') {
-            if (numPages > 20) {
-                const proceed = confirm(`Aapki PDF mein ${numPages} pages hain. High Accuracy OCR (Tesseract) har page ko scan karega jisme bahut time lag sakta hai. Kya aap aage badhna chahte hain?`);
-                if (!proceed) {
-                    loadingDiv.classList.add('hidden');
-                    uploadInput.value = '';
-                    return;
+        const processWordBuffer = (forceAll = false) => {
+            // Buffer words, make a part every ~800 words
+            while (wordBuffer.length >= 800 || (forceAll && wordBuffer.length > 0)) {
+                let chunkWords = (wordBuffer.length >= 800 && !forceAll) ? wordBuffer.splice(0, 800) : wordBuffer.splice(0, wordBuffer.length);
+                const partText = chunkWords.join(' ');
+                storyParts.push(partText);
+                appendPartToUI(partText, storyParts.length - 1);
+                
+                try {
+                    localStorage.setItem('pdf_parts', JSON.stringify(storyParts));
+                    localStorage.setItem('pdf_current_index', currentPartIndex.toString());
+                } catch (err) {
+                    console.warn("Storage full", err);
                 }
             }
-            
+        };
+        
+        if (mode === 'high-acc') {
             updateProgress("AI OCR Model Load ho raha hai...", "Kripya prateeksha karein", 0);
             
-            // In Tesseract.js v5, createWorker takes (langs, oem, options)
-            // It automatically loads language and initializes
             const worker = await Tesseract.createWorker('hin+eng', 1, {
                 logger: m => {
                     const percent = (m.progress * 100).toFixed(0);
                     if (m.status === 'recognizing text') {
-                        updateProgress(`AI Scanning Page...`, `Engine is processing text`, percent);
+                        updateProgress(`AI Scanning Page...`, `Background mein scan ho raha hai`, percent);
                     } else {
                         updateProgress(`Model Loading: ${m.status}`, `Kripya prateeksha karein`, percent);
                     }
@@ -211,7 +224,7 @@ uploadInput.addEventListener('change', async (e) => {
             });
 
             for (let i = 1; i <= numPages; i++) {
-                updateProgress(`Scanning Page ${i} / ${numPages}`, `Preparing high-res image...`, 0);
+                updateProgress(`Scanning Page ${i} / ${numPages}`, `Background OCR Process`, 0);
                 
                 const page = await pdf.getPage(i);
                 
@@ -223,13 +236,15 @@ uploadInput.addEventListener('change', async (e) => {
                 canvas.width = viewport.width;
 
                 await page.render({ canvasContext: ctx, viewport: viewport }).promise;
-                
                 preprocessCanvasForHindi(canvas);
 
-                updateProgress(`Scanning Page ${i} / ${numPages}`, `AI is reading text...`, 0);
                 const { data: { text } } = await worker.recognize(canvas);
                 
-                textArray.push(cleanupOCRText(text));
+                const cleanedText = cleanupOCRText(text);
+                const words = cleanedText.split(' ').filter(w => w.length > 0);
+                wordBuffer.push(...words);
+                
+                processWordBuffer(i === numPages);
             }
             
             await worker.terminate();
@@ -261,8 +276,11 @@ uploadInput.addEventListener('change', async (e) => {
                     lastItem = item;
                 }
                 
-                pageText = cleanupOCRText(pageText);
-                textArray.push(pageText);
+                const cleanedText = cleanupOCRText(pageText);
+                const words = cleanedText.split(' ').filter(w => w.length > 0);
+                wordBuffer.push(...words);
+                
+                processWordBuffer(i === numPages);
 
                 if (i % 5 === 0 || i === numPages) {
                     const percent = ((i / numPages) * 100).toFixed(0);
@@ -272,90 +290,25 @@ uploadInput.addEventListener('change', async (e) => {
             }
         }
 
-        fullExtractedText = textArray.join('\n\n').replace(/\s+/g, ' ').trim();
+        isProcessingPDF = false;
         
-        if (fullExtractedText.length === 0) {
+        if (storyParts.length === 0) {
             alert("Is PDF mein koi text nahi mila! Kripya dusri file try karein.");
-            loadingDiv.classList.add('hidden');
-            return;
+        } else {
+            updateProgress("🎉 Complete!", "Sari kahani process ho chuki hai.", 100);
+            setTimeout(() => {
+                loadingDiv.classList.add('hidden');
+                uploadSection.classList.add('hidden');
+            }, 3000);
         }
-
-        const words = fullExtractedText.split(' ').filter(w => w.length > 0);
-        const totalWords = words.length;
-        
-        recommendedPartsCount = Math.max(1, Math.ceil(totalWords / 900));
-        
-        document.getElementById('word-count').innerText = totalWords.toLocaleString();
-        document.getElementById('rec-parts').innerText = recommendedPartsCount;
-        partsInput.value = recommendedPartsCount;
-        partsInput.placeholder = `E.g: ${recommendedPartsCount}`;
-
-        loadingDiv.classList.add('hidden');
-        setupSection.classList.remove('hidden');
         
     } catch (error) {
         console.error("Error reading/OCR PDF:", error);
         alert("PDF ko padhne mein error aayi. Console log check karein.");
         loadingDiv.classList.add('hidden');
+        isProcessingPDF = false;
     }
 });
-
-generateBtn.addEventListener('click', () => {
-    let userParts = parseInt(partsInput.value);
-    if (!userParts || userParts < 1) {
-        userParts = recommendedPartsCount;
-    }
-
-    const words = fullExtractedText.split(' ').filter(w => w.length > 0);
-    const wordsPerPart = Math.ceil(words.length / userParts);
-    
-    storyParts = [];
-    for (let i = 0; i < userParts; i++) {
-        const partWords = words.slice(i * wordsPerPart, (i + 1) * wordsPerPart);
-        if (partWords.length > 0) {
-            storyParts.push(partWords.join(' '));
-        }
-    }
-
-    try {
-        localStorage.setItem('pdf_parts', JSON.stringify(storyParts));
-        localStorage.setItem('pdf_name', uploadInput.files[0] ? uploadInput.files[0].name : 'PDF File');
-        localStorage.setItem('pdf_current_index', '0');
-    } catch (err) {
-        console.warn("Storage full", err);
-    }
-
-    renderParts();
-    setupSection.classList.add('hidden');
-    uploadSection.classList.add('hidden');
-    controlsDiv.classList.remove('hidden');
-});
-
-function renderParts() {
-    partsContainer.innerHTML = '';
-    storyParts.forEach((part, index) => {
-        const div = document.createElement('div');
-        div.className = 'part-card';
-        div.id = `part-${index}`;
-        
-        const title = document.createElement('div');
-        title.className = 'part-title';
-        title.textContent = `Part ${index + 1}`;
-        
-        const textPreview = document.createElement('div');
-        textPreview.className = 'part-text';
-        textPreview.textContent = part;
-        
-        div.appendChild(title);
-        div.appendChild(textPreview);
-        
-        div.addEventListener('click', () => {
-            playPart(index);
-        });
-        
-        partsContainer.appendChild(div);
-    });
-}
 
 function playPart(index) {
     if (index >= storyParts.length) return;
@@ -379,7 +332,13 @@ function playPart(index) {
         if (document.getElementById(`part-${index}`)) {
             document.getElementById(`part-${index}`).classList.remove('playing');
         }
-        playPart(index + 1); 
+        
+        if (index + 1 < storyParts.length) {
+            playPart(index + 1); 
+        } else if (isProcessingPDF) {
+            // Agar agla part abhi OCR ho raha hai, toh wait karein
+            waitingForNextPartIndex = index + 1;
+        }
     });
 }
 
