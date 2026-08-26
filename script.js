@@ -196,18 +196,19 @@ uploadInput.addEventListener('change', async (e) => {
             
             updateProgress("AI OCR Model Load ho raha hai...", "Kripya prateeksha karein", 0);
             
-            const worker = await Tesseract.createWorker({
+            // In Tesseract.js v5, createWorker takes (langs, oem, options)
+            // It automatically loads language and initializes
+            const worker = await Tesseract.createWorker('hin+eng', 1, {
                 logger: m => {
+                    const percent = (m.progress * 100).toFixed(0);
                     if (m.status === 'recognizing text') {
-                        const percent = (m.progress * 100).toFixed(0);
-                        // We also append which page is running in the main loop below
                         updateProgress(`AI Scanning Page...`, `Engine is processing text`, percent);
+                    } else {
+                        updateProgress(`Model Loading: ${m.status}`, `Kripya prateeksha karein`, percent);
                     }
                 },
                 langPath: 'https://tessdata.projectnaptha.com/4.0.0_best'
             });
-            await worker.loadLanguage('hin+eng');
-            await worker.initialize('hin+eng');
 
             for (let i = 1; i <= numPages; i++) {
                 updateProgress(`Scanning Page ${i} / ${numPages}`, `Preparing high-res image...`, 0);
@@ -225,6 +226,7 @@ uploadInput.addEventListener('change', async (e) => {
                 
                 preprocessCanvasForHindi(canvas);
 
+                updateProgress(`Scanning Page ${i} / ${numPages}`, `AI is reading text...`, 0);
                 const { data: { text } } = await worker.recognize(canvas);
                 
                 textArray.push(cleanupOCRText(text));
