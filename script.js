@@ -3,7 +3,11 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
 const uploadInput = document.getElementById('pdf-upload');
 const uploadSection = document.querySelector('.upload-section');
 const loadingDiv = document.getElementById('loading');
+const loadingTitle = document.getElementById('loading-title');
 const loadingText = document.getElementById('loading-text');
+const progressTrack = document.getElementById('progress-track');
+const progressFill = document.getElementById('progress-fill');
+const progressPercentage = document.getElementById('progress-percentage');
 const setupSection = document.getElementById('setup-section');
 const controlsDiv = document.getElementById('controls');
 const partsContainer = document.getElementById('parts-container');
@@ -133,6 +137,22 @@ if (speechSynthesis.onvoiceschanged !== undefined) {
     speechSynthesis.onvoiceschanged = populateVoiceList;
 }
 
+// Helper: Update UI Progress Bar
+function updateProgress(title, desc, percent = null) {
+    loadingTitle.innerText = title;
+    loadingText.innerText = desc;
+    
+    if (percent !== null) {
+        progressTrack.classList.remove('hidden');
+        progressPercentage.classList.remove('hidden');
+        progressFill.style.width = `${percent}%`;
+        progressPercentage.innerText = `${percent}%`;
+    } else {
+        progressTrack.classList.add('hidden');
+        progressPercentage.classList.add('hidden');
+    }
+}
+
 uploadInput.addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -144,6 +164,8 @@ uploadInput.addEventListener('change', async (e) => {
     storyParts = [];
     currentPartIndex = 0;
     fullExtractedText = '';
+    
+    updateProgress("Processing PDF...", "Initializing...", 0);
     
     if (window.currentSpeakCancel) window.currentSpeakCancel();
     synth.cancel();
@@ -163,9 +185,6 @@ uploadInput.addEventListener('change', async (e) => {
         let textArray = [];
 
         if (mode === 'high-acc') {
-            // ==========================================
-            // HIGH ACCURACY TESSERACT.JS OCR MODE
-            // ==========================================
             if (numPages > 20) {
                 const proceed = confirm(`Aapki PDF mein ${numPages} pages hain. High Accuracy OCR (Tesseract) har page ko scan karega jisme bahut time lag sakta hai. Kya aap aage badhna chahte hain?`);
                 if (!proceed) {
@@ -175,26 +194,26 @@ uploadInput.addEventListener('change', async (e) => {
                 }
             }
             
-            // 1. Initialize Tesseract Worker (hin+eng) with tessdata_best
-            loadingText.innerText = `OCR AI Model Load ho raha hai...`;
+            updateProgress("AI OCR Model Load ho raha hai...", "Kripya prateeksha karein", 0);
+            
             const worker = await Tesseract.createWorker({
                 logger: m => {
                     if (m.status === 'recognizing text') {
-                        loadingText.innerText = `OCR Page Scan: ${(m.progress * 100).toFixed(0)}%`;
+                        const percent = (m.progress * 100).toFixed(0);
+                        // We also append which page is running in the main loop below
+                        updateProgress(`AI Scanning Page...`, `Engine is processing text`, percent);
                     }
                 },
-                // Use tessdata_best for highest accuracy
                 langPath: 'https://tessdata.projectnaptha.com/4.0.0_best'
             });
             await worker.loadLanguage('hin+eng');
             await worker.initialize('hin+eng');
 
             for (let i = 1; i <= numPages; i++) {
-                loadingText.innerText = `Preparing Page ${i} of ${numPages} for OCR...`;
+                updateProgress(`Scanning Page ${i} / ${numPages}`, `Preparing high-res image...`, 0);
                 
                 const page = await pdf.getPage(i);
                 
-                // Render High-Res Canvas (Scale 4.16 approx 300 DPI)
                 const scale = 4.16;
                 const viewport = page.getViewport({ scale: scale });
                 const canvas = document.createElement('canvas');
@@ -204,23 +223,16 @@ uploadInput.addEventListener('change', async (e) => {
 
                 await page.render({ canvasContext: ctx, viewport: viewport }).promise;
                 
-                // Preprocessing
                 preprocessCanvasForHindi(canvas);
 
-                // Run Tesseract Recognition
-                loadingText.innerText = `Scanning Page ${i} of ${numPages} with AI OCR...`;
                 const { data: { text } } = await worker.recognize(canvas);
                 
-                // Post-Processing & Normalization
                 textArray.push(cleanupOCRText(text));
             }
             
             await worker.terminate();
 
         } else {
-            // ==========================================
-            // FAST PDF TEXT EXTRACTION MODE
-            // ==========================================
             for (let i = 1; i <= numPages; i++) {
                 const page = await pdf.getPage(i);
                 const textContent = await page.getTextContent();
@@ -251,7 +263,8 @@ uploadInput.addEventListener('change', async (e) => {
                 textArray.push(pageText);
 
                 if (i % 5 === 0 || i === numPages) {
-                    loadingText.innerText = `Fast Mode: Page ${i} / ${numPages} read.`;
+                    const percent = ((i / numPages) * 100).toFixed(0);
+                    updateProgress(`Fast Mode: Reading PDF`, `Page ${i} of ${numPages}`, percent);
                     await new Promise(resolve => setTimeout(resolve, 5));
                 }
             }

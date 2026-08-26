@@ -48,8 +48,19 @@
         </div>
         
         <div id="loading" class="hidden">
-            <div class="spinner"></div> 
-            <span id="loading-text">Processing PDF... Kripya prateeksha karein.</span>
+            <div class="progress-container">
+                <div class="spinner"></div>
+                <div class="progress-info">
+                    <h3 id="loading-title">Processing PDF...</h3>
+                    <p id="loading-text">Kripya prateeksha karein</p>
+                    
+                    <!-- Progress Bar (New) -->
+                    <div class="progress-track hidden" id="progress-track">
+                        <div class="progress-fill" id="progress-fill"></div>
+                    </div>
+                    <p class="progress-percentage hidden" id="progress-percentage">0%</p>
+                </div>
+            </div>
         </div>
 
         <div id="setup-section" class="hidden">
