@@ -19,10 +19,19 @@ function populateVoiceList() {
     voices = synth.getVoices();
     voiceSelect.innerHTML = '';
     
-    // Sort voices to show Hindi/English first if possible
+    // Sort voices to show Hindi/English first, and prioritize 'Natural' or 'Google' premium voices
     let sortedVoices = [...voices].sort((a, b) => {
+        // Prioritize natural/premium voices
+        const aPremium = a.name.includes('Natural') || a.name.includes('Online') || a.name.includes('Google');
+        const bPremium = b.name.includes('Natural') || b.name.includes('Online') || b.name.includes('Google');
+        
+        if (aPremium && !bPremium) return -1;
+        if (!aPremium && bPremium) return 1;
+
+        // Then prioritize Hindi
         if (a.lang.includes('hi') && !b.lang.includes('hi')) return -1;
         if (!a.lang.includes('hi') && b.lang.includes('hi')) return 1;
+        
         return 0;
     });
 
