@@ -21,7 +21,21 @@
         </div>
         
         <div id="loading" class="hidden">
-            <div class="spinner"></div> Processing PDF... Kripya prateeksha karein.
+            <div class="spinner"></div> 
+            <span id="loading-text">Processing PDF... Kripya prateeksha karein.</span>
+        </div>
+
+        <div id="setup-section" class="hidden">
+            <h3>✅ PDF padh li gayi hai!</h3>
+            <p>Is PDF mein lagbhag <strong id="word-count">0</strong> shabd (words) hain.</p>
+            
+            <div class="parts-input-container">
+                <label for="parts-input">Kitne parts mein sunna chahte hain? (Optional)</label>
+                <input type="number" id="parts-input" min="1" placeholder="Jaise: 10">
+                <p class="recommendation">🌟 Recommended: <strong id="rec-parts">10</strong> parts (Har part lagbhag 5-7 minute ka hoga)</p>
+            </div>
+            
+            <button id="generate-btn" class="btn-primary">Kahani Sunna Shuru Karein 🚀</button>
         </div>
         
         <div id="controls" class="hidden">

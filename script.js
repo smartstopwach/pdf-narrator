@@ -2,17 +2,23 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
 
 const uploadInput = document.getElementById('pdf-upload');
 const loadingDiv = document.getElementById('loading');
+const loadingText = document.getElementById('loading-text');
+const setupSection = document.getElementById('setup-section');
 const controlsDiv = document.getElementById('controls');
 const partsContainer = document.getElementById('parts-container');
 const playBtn = document.getElementById('play-btn');
 const pauseBtn = document.getElementById('pause-btn');
 const stopBtn = document.getElementById('stop-btn');
 const voiceSelect = document.getElementById('voice-select');
+const generateBtn = document.getElementById('generate-btn');
+const partsInput = document.getElementById('parts-input');
 
+let fullExtractedText = '';
 let storyParts = [];
 let currentPartIndex = 0;
 let synth = window.speechSynthesis;
 let voices = [];
+let recommendedPartsCount = 10;
 
 // Load available voices for Text-to-Speech
 function populateVoiceList() {
@@ -24,17 +30,12 @@ function populateVoiceList() {
 
     // Sort voices to show Premium/Natural first, then Hindi, then English
     let sortedVoices = filteredVoices.sort((a, b) => {
-        // Prioritize natural/premium voices
         const aPremium = a.name.includes('Natural') || a.name.includes('Online') || a.name.includes('Google');
         const bPremium = b.name.includes('Natural') || b.name.includes('Online') || b.name.includes('Google');
-        
         if (aPremium && !bPremium) return -1;
         if (!aPremium && bPremium) return 1;
-
-        // Then prioritize Hindi over English
         if (a.lang.startsWith('hi') && !b.lang.startsWith('hi')) return -1;
         if (!a.lang.startsWith('hi') && b.lang.startsWith('hi')) return 1;
-        
         return 0;
     });
 
@@ -58,10 +59,12 @@ uploadInput.addEventListener('change', async (e) => {
 
     // Reset UI
     loadingDiv.classList.remove('hidden');
-    partsContainer.innerHTML = '';
+    setupSection.classList.add('hidden');
     controlsDiv.classList.add('hidden');
+    partsContainer.innerHTML = '';
     storyParts = [];
     currentPartIndex = 0;
+    fullExtractedText = '';
     
     if (window.currentSpeakCancel) window.currentSpeakCancel();
     synth.cancel();
@@ -69,44 +72,81 @@ uploadInput.addEventListener('change', async (e) => {
     try {
         const arrayBuffer = await file.arrayBuffer();
         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-        let fullText = '';
+        const numPages = pdf.numPages;
         
-        // Extract text from all pages
-        for (let i = 1; i <= pdf.numPages; i++) {
+        let textArray = [];
+
+        // Extract text page by page (without freezing browser for 500 pages)
+        for (let i = 1; i <= numPages; i++) {
             const page = await pdf.getPage(i);
             const textContent = await page.getTextContent();
+            
+            // Better Text extraction logic (adding spaces between items appropriately)
             const pageText = textContent.items.map(item => item.str).join(' ');
-            fullText += pageText + ' ';
+            textArray.push(pageText);
+
+            // Update UI progress every 5 pages or at the end
+            if (i % 5 === 0 || i === numPages) {
+                loadingText.innerText = `PDF padhi ja rahi hai... Page ${i} / ${numPages} mukammal.`;
+                // Small delay to let browser render the UI
+                await new Promise(resolve => setTimeout(resolve, 5));
+            }
         }
 
-        fullText = fullText.replace(/\s+/g, ' ').trim();
+        fullExtractedText = textArray.join('\n\n').replace(/\s+/g, ' ').trim();
         
-        if (fullText.length === 0) {
-            alert("Is PDF mein koi text nahi mila! Kripya text wali PDF chunein.");
+        if (fullExtractedText.length < numPages * 10) {
+            alert("Warning: Is PDF mein text bohot kam hai. Ho sakta hai ye 'Scanned Images' ki PDF ho. Images padhne ke liye mehengi OCR technology chahiye hoti hai.");
+        }
+
+        if (fullExtractedText.length === 0) {
+            alert("Is PDF mein koi text nahi mila!");
             loadingDiv.classList.add('hidden');
             return;
         }
 
-        // Divide text into 10 equal parts based on words
-        const words = fullText.split(' ');
-        const wordsPerPart = Math.ceil(words.length / 10);
+        // Calculate Words and Recommended Parts
+        const words = fullExtractedText.split(' ').filter(w => w.length > 0);
+        const totalWords = words.length;
         
-        for (let i = 0; i < 10; i++) {
-            const partWords = words.slice(i * wordsPerPart, (i + 1) * wordsPerPart);
-            if (partWords.length > 0) {
-                storyParts.push(partWords.join(' '));
-            }
-        }
+        // Assume 800-1000 words take about 5-7 minutes to read.
+        recommendedPartsCount = Math.max(1, Math.ceil(totalWords / 900));
+        
+        document.getElementById('word-count').innerText = totalWords.toLocaleString();
+        document.getElementById('rec-parts').innerText = recommendedPartsCount;
+        partsInput.value = recommendedPartsCount;
+        partsInput.placeholder = `E.g: ${recommendedPartsCount}`;
 
-        renderParts();
         loadingDiv.classList.add('hidden');
-        controlsDiv.classList.remove('hidden');
+        setupSection.classList.remove('hidden');
         
     } catch (error) {
         console.error("Error reading PDF:", error);
         alert("PDF ko padhne mein error aayi. Kripya doosri file try karein.");
         loadingDiv.classList.add('hidden');
     }
+});
+
+generateBtn.addEventListener('click', () => {
+    let userParts = parseInt(partsInput.value);
+    if (!userParts || userParts < 1) {
+        userParts = recommendedPartsCount;
+    }
+
+    const words = fullExtractedText.split(' ').filter(w => w.length > 0);
+    const wordsPerPart = Math.ceil(words.length / userParts);
+    
+    storyParts = [];
+    for (let i = 0; i < userParts; i++) {
+        const partWords = words.slice(i * wordsPerPart, (i + 1) * wordsPerPart);
+        if (partWords.length > 0) {
+            storyParts.push(partWords.join(' '));
+        }
+    }
+
+    renderParts();
+    setupSection.classList.add('hidden');
+    controlsDiv.classList.remove('hidden');
 });
 
 function renderParts() {
@@ -142,25 +182,21 @@ function playPart(index) {
     synth.cancel(); 
     currentPartIndex = index;
     
-    // Update UI
     document.querySelectorAll('.part-card').forEach(card => {
         card.classList.remove('active', 'playing');
     });
     const currentCard = document.getElementById(`part-${index}`);
     currentCard.classList.add('active', 'playing');
     
-    // Auto-scroll to the current playing part
     currentCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
     
     speakText(storyParts[index], () => {
-        // Callback when this part finishes playing
         document.getElementById(`part-${index}`).classList.remove('playing');
-        playPart(index + 1); // Play next part automatically
+        playPart(index + 1); 
     });
 }
 
 function speakText(text, onEndCallback) {
-    // Chunk the text into smaller sentences (around 150-200 chars) to prevent Web Speech API from cutting off
     const max_length = 150;
     let chunks = [];
     let currentChunk = "";
@@ -174,14 +210,11 @@ function speakText(text, onEndCallback) {
             currentChunk += " " + word;
         }
     }
-    if (currentChunk) {
-        chunks.push(currentChunk.trim());
-    }
+    if (currentChunk) chunks.push(currentChunk.trim());
     
     let sIndex = 0;
     let isCancelled = false;
     
-    // Global cancel function for the stop button to halt the chunk loop
     window.currentSpeakCancel = () => { 
         isCancelled = true; 
         synth.cancel(); 
@@ -193,7 +226,6 @@ function speakText(text, onEndCallback) {
         if (sIndex < chunks.length) {
             const utterance = new SpeechSynthesisUtterance(chunks[sIndex]);
             
-            // Set selected voice
             const selectedVoice = voiceSelect.options[voiceSelect.selectedIndex];
             if (selectedVoice) {
                 const voice = voices.find(v => v.name === selectedVoice.getAttribute('data-name'));

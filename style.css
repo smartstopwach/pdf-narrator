@@ -63,6 +63,53 @@ input[type="file"] {
     margin: 20px 0;
 }
 
+#setup-section {
+    background-color: #f8f9fa;
+    padding: 20px;
+    border-radius: 8px;
+    margin: 20px 0;
+    text-align: center;
+    border: 1px solid #dee2e6;
+}
+
+#setup-section h3 {
+    color: #27ae60;
+    margin-top: 0;
+}
+
+.parts-input-container {
+    margin: 20px 0;
+}
+
+.parts-input-container label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: bold;
+}
+
+#parts-input {
+    padding: 10px;
+    font-size: 16px;
+    width: 150px;
+    border: 2px solid #3498db;
+    border-radius: 6px;
+    text-align: center;
+}
+
+.recommendation {
+    font-size: 14px;
+    color: #e67e22;
+    margin-top: 10px;
+}
+
+.btn-primary {
+    background-color: #3498db;
+    width: 100%;
+    max-width: 300px;
+    padding: 12px;
+    font-size: 16px;
+}
+
 #controls {
     background-color: #f9f9f9;
     padding: 20px;
