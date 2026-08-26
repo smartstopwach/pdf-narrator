@@ -362,13 +362,17 @@ function playPart(index) {
     document.querySelectorAll('.part-card').forEach(card => {
         card.classList.remove('active', 'playing');
     });
+    
     const currentCard = document.getElementById(`part-${index}`);
+    let textContainer = null;
+    
     if (currentCard) {
         currentCard.classList.add('active', 'playing');
         currentCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        textContainer = currentCard.querySelector('.part-text');
     }
     
-    speakText(storyParts[index], () => {
+    speakText(storyParts[index], textContainer, () => {
         if (document.getElementById(`part-${index}`)) {
             document.getElementById(`part-${index}`).classList.remove('playing');
         }
@@ -376,13 +380,12 @@ function playPart(index) {
         if (index + 1 < storyParts.length) {
             playPart(index + 1); 
         } else if (isProcessingPDF) {
-            // Agar agla part abhi OCR ho raha hai, toh wait karein
             waitingForNextPartIndex = index + 1;
         }
     });
 }
 
-function speakText(text, onEndCallback) {
+function speakText(text, textContainer, onEndCallback) {
     const max_length = 150;
     let chunks = [];
     let currentChunk = "";
@@ -398,18 +401,43 @@ function speakText(text, onEndCallback) {
     }
     if (currentChunk) chunks.push(currentChunk.trim());
     
+    // UI: Wrap chunks in spans for highlighting
+    if (textContainer) {
+        textContainer.innerHTML = '';
+        chunks.forEach((chunk, i) => {
+            const span = document.createElement('span');
+            span.id = `chunk-span-${i}`;
+            span.textContent = chunk + ' ';
+            textContainer.appendChild(span);
+        });
+    }
+    
     let sIndex = 0;
     let isCancelled = false;
     
     window.currentSpeakCancel = () => { 
         isCancelled = true; 
         synth.cancel(); 
+        if (document.getElementById(`chunk-span-${sIndex}`)) {
+            document.getElementById(`chunk-span-${sIndex}`).classList.remove('highlight-text');
+        }
     };
 
     function speakNextSentence() {
         if (isCancelled) return;
         
         if (sIndex < chunks.length) {
+            
+            // Apply Red Pen Highlight & Auto-Scroll
+            if (textContainer) {
+                document.querySelectorAll('.highlight-text').forEach(el => el.classList.remove('highlight-text'));
+                const currentSpan = document.getElementById(`chunk-span-${sIndex}`);
+                if (currentSpan) {
+                    currentSpan.classList.add('highlight-text');
+                    currentSpan.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }
+
             const utterance = new SpeechSynthesisUtterance(chunks[sIndex]);
             
             const selectedVoice = voiceSelect.options[voiceSelect.selectedIndex];
@@ -430,6 +458,9 @@ function speakText(text, onEndCallback) {
             
             synth.speak(utterance);
         } else {
+            if (textContainer) {
+                document.querySelectorAll('.highlight-text').forEach(el => el.classList.remove('highlight-text'));
+            }
             if (onEndCallback && !isCancelled) onEndCallback();
         }
     }

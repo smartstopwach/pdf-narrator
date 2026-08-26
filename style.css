@@ -284,6 +284,24 @@ input[type="file"] { display: none; }
     overflow: hidden;
     line-height: 1.7;
     transform: translateZ(10px);
+    transition: color 0.3s ease;
+}
+
+.part-card.playing .part-text {
+    display: block; /* Removes line clamp */
+    overflow: visible;
+    color: var(--text-main);
+}
+
+/* Red Pen Highlight Effect */
+.highlight-text {
+    color: var(--danger);
+    background-color: rgba(239, 68, 68, 0.1);
+    border-bottom: 2px solid var(--danger);
+    border-radius: 4px;
+    padding: 2px 0;
+    transition: all 0.2s ease-in-out;
+    font-weight: 600;
 }
 
 /* Sections & Controls */
