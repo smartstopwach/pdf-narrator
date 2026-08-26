@@ -124,8 +124,42 @@ uploadInput.addEventListener('change', async (e) => {
             const page = await pdf.getPage(i);
             const textContent = await page.getTextContent();
             
-            const pageText = textContent.items.map(item => item.str).join(' ');
-            textArray.push(pageText);
+            // Advanced Text Extraction: Positional Heuristic to fix Hindi split characters
+            let pageText = "";
+            let lastItem = null;
+
+            for (const item of textContent.items) {
+                if (lastItem) {
+                    const yDiff = Math.abs(item.transform[5] - lastItem.transform[5]);
+                    if (yDiff > 5) {
+                        pageText += '\n';
+                    } else {
+                        const expectedNextX = lastItem.transform[4] + lastItem.width;
+                        const gap = item.transform[4] - expectedNextX;
+                        
+                        // If gap is larger than 3 units, or the text itself is a space, treat it as a word break.
+                        if (gap > 3 || item.str === ' ') {
+                            if (!pageText.endsWith(' ') && !pageText.endsWith('\n')) {
+                                pageText += ' ';
+                            }
+                        }
+                    }
+                }
+                
+                if (item.str.trim() !== '') {
+                    pageText += item.str;
+                } else if (item.str === ' ' && !pageText.endsWith(' ') && !pageText.endsWith('\n')) {
+                    pageText += ' ';
+                }
+                
+                // Keep track of the last non-empty item for positional reference, 
+                // but if it's just a space, don't update lastItem so we don't mess up gap calculations.
+                if (item.str.trim() !== '' || !lastItem) {
+                    lastItem = item;
+                }
+            }
+            
+            textArray.push(pageText.trim());
 
             if (i % 5 === 0 || i === numPages) {
                 loadingText.innerText = `PDF padhi ja rahi hai... Page ${i} / ${numPages} mukammal.`;
