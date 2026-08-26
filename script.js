@@ -68,6 +68,15 @@ const focusMainText = document.getElementById('focus-main-text');
 const focusNextText = document.getElementById('focus-next-text');
 const multiVoiceToggle = document.getElementById('multi-voice-toggle');
 
+// Let variables be initialized before calling them
+let storyParts = [];
+let currentPartIndex = 0;
+let synth = window.speechSynthesis;
+let voices = [];
+let isProcessingPDF = false;
+let waitingForNextPartIndex = -1;
+let isFocusMode = false;
+
 // Cinematic Ambience Elements
 const ambienceSelect = document.getElementById('ambience-select');
 const ambienceVolume = document.getElementById('ambience-volume');
@@ -86,7 +95,7 @@ ambienceSelect.addEventListener('change', (e) => {
         ambienceAudio.pause();
     } else {
         ambienceAudio.src = ambienceSounds[e.target.value];
-        if (synth.speaking && !synth.paused) {
+        if (synth && synth.speaking && !synth.paused) {
             ambienceAudio.play();
         }
     }
@@ -98,7 +107,7 @@ ambienceVolume.addEventListener('input', (e) => {
 // Live Voice Visualizer Logic
 function updateVisualizer() {
     const bars = document.querySelectorAll('.visualizer .bar');
-    if (synth.speaking && !synth.paused) {
+    if (synth && synth.speaking && !synth.paused) {
         bars.forEach(bar => {
             const height = Math.floor(Math.random() * 80) + 20; // Random height between 20% and 100%
             bar.style.height = `${height}%`;
@@ -109,14 +118,6 @@ function updateVisualizer() {
     setTimeout(() => requestAnimationFrame(updateVisualizer), 120); // Update every 120ms for smooth beat effect
 }
 updateVisualizer();
-
-let storyParts = [];
-let currentPartIndex = 0;
-let synth = window.speechSynthesis;
-let voices = [];
-let isProcessingPDF = false;
-let waitingForNextPartIndex = -1;
-let isFocusMode = false;
 
 // Theme Logic
 const savedTheme = localStorage.getItem('pdf_theme') || 'theme-dark';
