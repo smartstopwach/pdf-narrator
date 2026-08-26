@@ -298,6 +298,9 @@ uploadInput.addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
+    // Reset input value so the same file can be selected again if needed
+    e.target.value = '';
+
     loadingDiv.classList.remove('hidden');
     controlsDiv.classList.add('hidden');
     partsContainer.innerHTML = '';
