@@ -57,6 +57,28 @@ h1 {
     margin-bottom: 40px;
 }
 
+/* Settings */
+.settings-card {
+    background: #f8fafc;
+    padding: 15px 20px;
+    border-radius: 12px;
+    margin-bottom: 25px;
+    border: 1px solid var(--border-color);
+    text-align: center;
+}
+
+.settings-card label {
+    font-weight: 600;
+    margin-right: 10px;
+    color: var(--text-main);
+}
+
+.settings-card select {
+    padding: 8px 12px;
+    font-size: 0.95rem;
+    max-width: 350px;
+}
+
 /* Upload Section */
 .upload-section {
     text-align: center;

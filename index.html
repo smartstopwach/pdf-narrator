@@ -11,14 +11,26 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Poppins:wght@500;600;700;800&display=swap" rel="stylesheet">
     
     <link rel="stylesheet" href="style.css">
-    <!-- PDF.js for reading PDF files in the browser -->
+    
+    <!-- PDF.js for reading PDF files -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    
+    <!-- Tesseract.js for High Accuracy OCR -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 </head>
 <body>
     <div class="container">
         <h1>PDF Story Narrator 🎧</h1>
         <p class="subtitle">Apni PDF upload karein aur 10 parts mein story sunein - Bilkul Free!</p>
         
+        <div id="settings-section" class="settings-card">
+            <label for="ocr-mode">⚙️ Extraction Mode (OCR):</label>
+            <select id="ocr-mode">
+                <option value="high-acc" selected>High Accuracy OCR (Best for Hindi - Slower)</option>
+                <option value="fast">Fast Text Mode (May corrupt some fonts)</option>
+            </select>
+        </div>
+
         <div id="resume-section" class="hidden">
             <h3>Pichli Kahani Bachi Hai! 📖</h3>
             <p>Aapne pichli baar <strong id="saved-file-name"></strong> padhna shuru kiya tha.</p>

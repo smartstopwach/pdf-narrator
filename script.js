@@ -13,6 +13,7 @@ const stopBtn = document.getElementById('stop-btn');
 const voiceSelect = document.getElementById('voice-select');
 const generateBtn = document.getElementById('generate-btn');
 const partsInput = document.getElementById('parts-input');
+const ocrModeSelect = document.getElementById('ocr-mode');
 
 const resumeSection = document.getElementById('resume-section');
 const resumeBtn = document.getElementById('resume-btn');
@@ -26,7 +27,52 @@ let synth = window.speechSynthesis;
 let voices = [];
 let recommendedPartsCount = 10;
 
-// Page Load: Check if we have saved data
+// Helper: Apply Devanagari specific Pre-processing on Canvas
+function preprocessCanvasForHindi(canvas) {
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    
+    // Grayscale + High Contrast/Thresholding (Binarization)
+    for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        
+        // Luminance
+        const v = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        // Optimal Threshold to preserve Shirorekha (Top line of Hindi) and Matras
+        const threshold = 170; 
+        const val = v > threshold ? 255 : 0;
+        
+        data[i] = data[i+1] = data[i+2] = val;
+    }
+    
+    ctx.putImageData(imageData, 0, 0);
+    return canvas;
+}
+
+// Helper: Advanced UTF-8 Cleanup & Devanagari Normalization
+function cleanupOCRText(text) {
+    // 1. Unicode Normalization
+    let cleaned = text.normalize('NFC');
+    
+    // 2. Remove Corrupted/Unrecognized artifact spaces around matras
+    cleaned = cleaned.replace(/ ([ािीुूृेैोौंःँॅ्])/g, '$1');
+    
+    // 3. Fix halant spacing (e.g. क् + य)
+    cleaned = cleaned.replace(/् /g, '्');
+    
+    // 4. Common Tesseract glitches cleanup
+    cleaned = cleaned.replace(/\|/g, '।'); // Often mistakes Poorna Viram for pipe
+    
+    // 5. Remove multiple spaces and weird linebreaks
+    cleaned = cleaned.replace(/  +/g, ' ');
+    cleaned = cleaned.replace(/-\n/g, ''); // Join hyphenated breaks
+    
+    return cleaned.trim();
+}
+
 window.addEventListener('DOMContentLoaded', () => {
     if (localStorage.getItem('pdf_parts')) {
         uploadSection.classList.add('hidden');
@@ -35,7 +81,6 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// Resume Previous PDF
 resumeBtn.addEventListener('click', () => {
     storyParts = JSON.parse(localStorage.getItem('pdf_parts') || '[]');
     currentPartIndex = parseInt(localStorage.getItem('pdf_current_index') || '0');
@@ -44,7 +89,6 @@ resumeBtn.addEventListener('click', () => {
     controlsDiv.classList.remove('hidden');
     renderParts();
     
-    // Highlight the part user was on
     setTimeout(() => {
         const currentCard = document.getElementById(`part-${currentPartIndex}`);
         if (currentCard) {
@@ -54,20 +98,17 @@ resumeBtn.addEventListener('click', () => {
     }, 100);
 });
 
-// Clear Storage to start fresh
 clearBtn.addEventListener('click', () => {
     localStorage.clear();
     resumeSection.classList.add('hidden');
     uploadSection.classList.remove('hidden');
 });
 
-// Load Voices
 function populateVoiceList() {
     voices = synth.getVoices();
     voiceSelect.innerHTML = '';
     
     let filteredVoices = voices.filter(voice => voice.lang.startsWith('hi') || voice.lang.startsWith('en'));
-
     let sortedVoices = filteredVoices.sort((a, b) => {
         const aPremium = a.name.includes('Natural') || a.name.includes('Online') || a.name.includes('Google');
         const bPremium = b.name.includes('Natural') || b.name.includes('Online') || b.name.includes('Google');
@@ -92,7 +133,6 @@ if (speechSynthesis.onvoiceschanged !== undefined) {
     speechSynthesis.onvoiceschanged = populateVoiceList;
 }
 
-// Read New PDF
 uploadInput.addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -108,6 +148,8 @@ uploadInput.addEventListener('change', async (e) => {
     if (window.currentSpeakCancel) window.currentSpeakCancel();
     synth.cancel();
 
+    const mode = ocrModeSelect.value;
+    
     try {
         const arrayBuffer = await file.arrayBuffer();
         const pdf = await pdfjsLib.getDocument({ 
@@ -120,71 +162,105 @@ uploadInput.addEventListener('change', async (e) => {
         
         let textArray = [];
 
-        for (let i = 1; i <= numPages; i++) {
-            const page = await pdf.getPage(i);
-            const textContent = await page.getTextContent();
-            
-            // Advanced Text Extraction with dynamic spacing and Hindi Grammar Fixer
-            let pageText = "";
-            let lastItem = null;
-
-            // Optional: Sorting items by Y, then X could help, but usually items are in order.
-            for (const item of textContent.items) {
-                if (!item.str || item.str.trim() === '') continue;
-
-                if (lastItem) {
-                    const yDiff = Math.abs(item.transform[5] - lastItem.transform[5]);
-                    
-                    if (yDiff > 5) {
-                        pageText += '\n';
-                    } else {
-                        const expectedNextX = lastItem.transform[4] + lastItem.width;
-                        const actualX = item.transform[4];
-                        const gap = actualX - expectedNextX;
-                        
-                        // Calculate dynamic space threshold based on font size
-                        const fontSize = Math.abs(lastItem.transform[0]) || 12;
-                        const spaceThreshold = fontSize * 0.20; // 20% of font size
-
-                        if (gap > spaceThreshold) {
-                            pageText += ' ';
-                        }
-                    }
+        if (mode === 'high-acc') {
+            // ==========================================
+            // HIGH ACCURACY TESSERACT.JS OCR MODE
+            // ==========================================
+            if (numPages > 20) {
+                const proceed = confirm(`Aapki PDF mein ${numPages} pages hain. High Accuracy OCR (Tesseract) har page ko scan karega jisme bahut time lag sakta hai. Kya aap aage badhna chahte hain?`);
+                if (!proceed) {
+                    loadingDiv.classList.add('hidden');
+                    uploadInput.value = '';
+                    return;
                 }
-                
-                pageText += item.str;
-                lastItem = item;
             }
             
-            // --- HINDI GRAMMAR & MATRA FIXER ---
-            // 1. Remove spaces before all matras and halants
-            pageText = pageText.replace(/ ([ािीुूृेैोौंःँॅ्])/g, '$1');
-            
-            // 2. Remove spaces after halant so half-letters join properly (e.g. क् + य)
-            pageText = pageText.replace(/् /g, '्');
-            
-            // 3. Fix Chhoti 'i' (ि) appearing before the consonant (common PDF glitch)
-            // It swaps "ि" + "क" to "कि"
-            pageText = pageText.replace(/(ि)([क-ह])/g, '$2$1');
-            
-            // 4. Clean up any accidental double spaces created
-            pageText = pageText.replace(/  +/g, ' ').trim();
+            // 1. Initialize Tesseract Worker (hin+eng) with tessdata_best
+            loadingText.innerText = `OCR AI Model Load ho raha hai...`;
+            const worker = await Tesseract.createWorker({
+                logger: m => {
+                    if (m.status === 'recognizing text') {
+                        loadingText.innerText = `OCR Page Scan: ${(m.progress * 100).toFixed(0)}%`;
+                    }
+                },
+                // Use tessdata_best for highest accuracy
+                langPath: 'https://tessdata.projectnaptha.com/4.0.0_best'
+            });
+            await worker.loadLanguage('hin+eng');
+            await worker.initialize('hin+eng');
 
-            textArray.push(pageText);
+            for (let i = 1; i <= numPages; i++) {
+                loadingText.innerText = `Preparing Page ${i} of ${numPages} for OCR...`;
+                
+                const page = await pdf.getPage(i);
+                
+                // Render High-Res Canvas (Scale 4.16 approx 300 DPI)
+                const scale = 4.16;
+                const viewport = page.getViewport({ scale: scale });
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
 
-            if (i % 5 === 0 || i === numPages) {
-                loadingText.innerText = `PDF padhi ja rahi hai... Page ${i} / ${numPages} mukammal.`;
-                await new Promise(resolve => setTimeout(resolve, 5));
+                await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+                
+                // Preprocessing
+                preprocessCanvasForHindi(canvas);
+
+                // Run Tesseract Recognition
+                loadingText.innerText = `Scanning Page ${i} of ${numPages} with AI OCR...`;
+                const { data: { text } } = await worker.recognize(canvas);
+                
+                // Post-Processing & Normalization
+                textArray.push(cleanupOCRText(text));
+            }
+            
+            await worker.terminate();
+
+        } else {
+            // ==========================================
+            // FAST PDF TEXT EXTRACTION MODE
+            // ==========================================
+            for (let i = 1; i <= numPages; i++) {
+                const page = await pdf.getPage(i);
+                const textContent = await page.getTextContent();
+                
+                let pageText = "";
+                let lastItem = null;
+
+                for (const item of textContent.items) {
+                    if (!item.str || item.str.trim() === '') continue;
+
+                    if (lastItem) {
+                        const yDiff = Math.abs(item.transform[5] - lastItem.transform[5]);
+                        if (yDiff > 5) {
+                            pageText += '\n';
+                        } else {
+                            const expectedNextX = lastItem.transform[4] + lastItem.width;
+                            const actualX = item.transform[4];
+                            const gap = actualX - expectedNextX;
+                            const fontSize = Math.abs(lastItem.transform[0]) || 12;
+                            if (gap > (fontSize * 0.20)) pageText += ' ';
+                        }
+                    }
+                    pageText += item.str;
+                    lastItem = item;
+                }
+                
+                pageText = cleanupOCRText(pageText);
+                textArray.push(pageText);
+
+                if (i % 5 === 0 || i === numPages) {
+                    loadingText.innerText = `Fast Mode: Page ${i} / ${numPages} read.`;
+                    await new Promise(resolve => setTimeout(resolve, 5));
+                }
             }
         }
 
         fullExtractedText = textArray.join('\n\n').replace(/\s+/g, ' ').trim();
         
-        if (fullExtractedText.length < numPages * 10) {
-            alert("Warning: Is PDF mein text bohot kam hai.");
-        }
         if (fullExtractedText.length === 0) {
-            alert("Is PDF mein koi text nahi mila!");
+            alert("Is PDF mein koi text nahi mila! Kripya dusri file try karein.");
             loadingDiv.classList.add('hidden');
             return;
         }
@@ -203,13 +279,12 @@ uploadInput.addEventListener('change', async (e) => {
         setupSection.classList.remove('hidden');
         
     } catch (error) {
-        console.error("Error reading PDF:", error);
-        alert("PDF ko padhne mein error aayi. Kripya doosri file try karein.");
+        console.error("Error reading/OCR PDF:", error);
+        alert("PDF ko padhne mein error aayi. Console log check karein.");
         loadingDiv.classList.add('hidden');
     }
 });
 
-// Generate Parts
 generateBtn.addEventListener('click', () => {
     let userParts = parseInt(partsInput.value);
     if (!userParts || userParts < 1) {
@@ -227,7 +302,6 @@ generateBtn.addEventListener('click', () => {
         }
     }
 
-    // Save Data to Local Storage (so it doesn't get lost on refresh)
     try {
         localStorage.setItem('pdf_parts', JSON.stringify(storyParts));
         localStorage.setItem('pdf_name', uploadInput.files[0] ? uploadInput.files[0].name : 'PDF File');
@@ -275,7 +349,6 @@ function playPart(index) {
     synth.cancel(); 
     currentPartIndex = index;
     
-    // Save current part progress
     localStorage.setItem('pdf_current_index', index.toString());
     
     document.querySelectorAll('.part-card').forEach(card => {
