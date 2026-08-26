@@ -43,12 +43,25 @@ function preprocessCanvasForHindi(canvas) {
 
 function cleanupOCRText(text) {
     let cleaned = text.normalize('NFC');
+    
+    // 1. Tesseract often mistakes Poorna Viram (।) for pipe, 1, or l at the end of sentences
+    cleaned = cleaned.replace(/[\|lI1]\s*(?=\n|$)/g, '।'); 
+    cleaned = cleaned.replace(/\|/g, '।');
+    
+    // 2. Remove accidental spaces before matras and halant
     cleaned = cleaned.replace(/ ([ािीुूृेैोौंःँॅ्])/g, '$1');
+    
+    // 3. Remove space after halant for proper half-character joining (e.g. क् + य)
     cleaned = cleaned.replace(/् /g, '्');
-    cleaned = cleaned.replace(/(ि)([क-ह])/g, '$2$1');
-    cleaned = cleaned.replace(/\|/g, '।'); 
+    
+    // 4. Fix Chhoti 'i' (ि) appearing before the consonant (Unicode range for Ka-Ha and extra consonants)
+    cleaned = cleaned.replace(/(ि)([\u0915-\u0939\u0958-\u095F])/g, '$2$1');
+    
+    // 5. Clean extra spaces and broken line hyphenations
     cleaned = cleaned.replace(/  +/g, ' ');
     cleaned = cleaned.replace(/-\n/g, ''); 
+    cleaned = cleaned.replace(/\n /g, '\n');
+    
     return cleaned.trim();
 }
 
@@ -228,6 +241,7 @@ uploadInput.addEventListener('change', async (e) => {
                 
                 const page = await pdf.getPage(i);
                 
+                // 300 DPI Scale
                 const scale = 4.16;
                 const viewport = page.getViewport({ scale: scale });
                 const canvas = document.createElement('canvas');
@@ -235,8 +249,16 @@ uploadInput.addEventListener('change', async (e) => {
                 canvas.height = viewport.height;
                 canvas.width = viewport.width;
 
+                // CRITICAL FIX: Fill canvas with pure white background FIRST.
+                // Transparent PDFs turn black without this, and neural nets need a solid white base.
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
                 await page.render({ canvasContext: ctx, viewport: viewport }).promise;
-                preprocessCanvasForHindi(canvas);
+                
+                // REMOVED: Manual Binarization. 
+                // Tesseract's LSTM (tessdata_best) works much better on raw anti-aliased images.
+                // Hard thresholding was destroying thin Matras and Shirorekha.
 
                 const { data: { text } } = await worker.recognize(canvas);
                 
