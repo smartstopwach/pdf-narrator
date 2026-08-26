@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Free PDF Story Narrator</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- PDF.js for reading PDF files in the browser -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>PDF Story Narrator 🎧</h1>
+        <p class="subtitle">Apni PDF upload karein aur 10 parts mein story sunein - Bilkul Free!</p>
+        
+        <div class="upload-section">
+            <label for="pdf-upload" class="custom-file-upload">
+                📄 PDF File Chunein
+            </label>
+            <input type="file" id="pdf-upload" accept="application/pdf" />
+        </div>
+        
+        <div id="loading" class="hidden">
+            <div class="spinner"></div> Processing PDF... Kripya prateeksha karein.
+        </div>
+        
+        <div id="controls" class="hidden">
+            <div class="voice-selection">
+                <label for="voice-select">Awaaz (Voice) chunein:</label>
+                <select id="voice-select"></select>
+            </div>
+            <div class="buttons">
+                <button id="play-btn" class="btn-play">▶ Play / Resume</button>
+                <button id="pause-btn" class="btn-pause">⏸ Pause</button>
+                <button id="stop-btn" class="btn-stop">⏹ Stop</button>
+            </div>
+        </div>
+
+        <div id="parts-container"></div>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html>
