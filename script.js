@@ -313,7 +313,14 @@ uploadInput.addEventListener('change', async (e) => {
     synth.cancel();
 
     const mode = ocrModeSelect.value;
-    localStorage.setItem('pdf_name', file.name);
+    
+    try {
+        // Clear previous parts to free up localStorage space before setting new one
+        localStorage.removeItem('pdf_parts');
+        localStorage.setItem('pdf_name', file.name);
+    } catch (err) {
+        console.warn("Storage warning:", err);
+    }
     
     try {
         const arrayBuffer = await file.arrayBuffer();
